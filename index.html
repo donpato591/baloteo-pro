@@ -2319,6 +2319,73 @@
     let isCloudSyncing = false;
     let cloudDebounceTimer = null;
 
+    // MOTOR DE DESDUPLICACIÓN ESTRICTA PARA EVITAR REGISTROS REPETIDOS
+    function deduplicateAppData(data) {
+      if (!data) return data;
+
+      // 1. Desduplicar Corrales Oficiales (por nombre e ID único)
+      if (Array.isArray(data.corrales)) {
+        const seenCorrales = new Set();
+        data.corrales = data.corrales.filter(c => {
+          if (!c || !c.name) return false;
+          const key = c.name.trim().toLowerCase();
+          if (seenCorrales.has(key)) return false;
+          seenCorrales.add(key);
+          return true;
+        });
+      }
+
+      // 2. Desduplicar Aves Oficiales (por placa única correlativa e ID)
+      if (Array.isArray(data.aves)) {
+        const seenPlacas = new Set();
+        data.aves = data.aves.filter(a => {
+          if (!a || a.placa === undefined || a.placa === null) return false;
+          const key = String(a.placa).trim().toLowerCase();
+          if (!key || seenPlacas.has(key)) return false;
+          seenPlacas.add(key);
+          return true;
+        });
+      }
+
+      // 3. Desduplicar Carpetas / Corrales Particulares (por nombre e ID)
+      if (Array.isArray(data.particularCorrales)) {
+        const seenPartCorrales = new Set();
+        data.particularCorrales = data.particularCorrales.filter(c => {
+          if (!c || !c.name) return false;
+          const key = c.name.trim().toLowerCase();
+          if (seenPartCorrales.has(key)) return false;
+          seenPartCorrales.add(key);
+          return true;
+        });
+      }
+
+      // 4. Desduplicar Fichas Particulares (por criador + placa de corral)
+      if (Array.isArray(data.particularRecords)) {
+        const seenPartRecords = new Set();
+        data.particularRecords = data.particularRecords.filter(p => {
+          if (!p) return false;
+          const key = `${(p.owner || '').trim().toLowerCase()}___${(p.placaCorral || p.id || '').trim().toLowerCase()}`;
+          if (seenPartRecords.has(key)) return false;
+          seenPartRecords.add(key);
+          return true;
+        });
+      }
+
+      // 5. Desduplicar Calendario (por fecha + título)
+      if (Array.isArray(data.calendar)) {
+        const seenCal = new Set();
+        data.calendar = data.calendar.filter(c => {
+          if (!c) return false;
+          const key = `${(c.eventDate || '').trim()}___${(c.title || '').trim().toLowerCase()}`;
+          if (seenCal.has(key)) return false;
+          seenCal.add(key);
+          return true;
+        });
+      }
+
+      return data;
+    }
+
     function getStoredSupabaseConfig() {
       const u = localStorage.getItem('baloteo_supabase_url') || SUPABASE_PROJECT_URL;
       const k = localStorage.getItem('baloteo_supabase_key') || SUPABASE_ANON_KEY;
@@ -2329,7 +2396,15 @@
       if (!window.supabase) return;
       try {
         const { url, key } = getStoredSupabaseConfig();
+        // Evitar duplicación de instancias de Supabase Client en memoria
+        if (window.__supabaseSingletonInstance && window.__supabaseSingletonUrl === url && window.__supabaseSingletonKey === key) {
+          supabase = window.__supabaseSingletonInstance;
+          return;
+        }
         supabase = window.supabase.createClient(url, key);
+        window.__supabaseSingletonInstance = supabase;
+        window.__supabaseSingletonUrl = url;
+        window.__supabaseSingletonKey = key;
       } catch (e) {
         console.error('Error inicializando cliente Supabase:', e);
       }
@@ -2383,7 +2458,7 @@
         if (res.status === 200 || res.status === 206) {
           if (diagDot) diagDot.className = 'w-3 h-3 rounded-full bg-emerald-400';
           if (diagStatus) diagStatus.innerText = '🟢 Conexión Exitosa (200 OK)';
-          if (diagDetail) diagDetail.innerText = `¡Tu base de datos Supabase responde correctamente! Las tablas están listas y los dispositivos pueden sincronizar.`;
+          if (diagDetail) diagDetail.innerText = `¡Tu base de datos Supabase responde correctamente! Las tablas están listas y los dispositivos pueden sincronizar sin duplicados.`;
           updateSupabaseStatus('connected', 'Nube Conectada');
         } else if (res.status === 401 || res.status === 403) {
           if (diagDot) diagDot.className = 'w-3 h-3 rounded-full bg-red-500';
@@ -2425,6 +2500,9 @@
       try {
         if (window.supabase) {
           supabase = window.supabase.createClient(inUrl, inKey);
+          window.__supabaseSingletonInstance = supabase;
+          window.__supabaseSingletonUrl = inUrl;
+          window.__supabaseSingletonKey = inKey;
         }
         alert('✓ Configuración de Supabase guardada. Iniciando prueba de sincronización...');
         await testCloudConnection();
@@ -2578,6 +2656,9 @@ CREATE POLICY "Permitir todo en calendario" ON public.calendario_jugadas FOR ALL
       isCloudSyncing = true;
       if (!silent) updateSupabaseStatus('syncing', 'Guardando en la Nube...');
 
+      // Desduplicar datos locales antes del push
+      appData = deduplicateAppData(appData);
+
       const errors = [];
       let savedCorrales = 0, savedAves = 0, savedPart = 0, savedCal = 0;
 
@@ -2695,7 +2776,7 @@ CREATE POLICY "Permitir todo en calendario" ON public.calendario_jugadas FOR ALL
         try {
           const { data: masterState } = await supabase.from('baloteo_master_state').select('payload').eq('id', 'torneo_actual').single();
           if (masterState && masterState.payload && Array.isArray(masterState.payload.aves) && masterState.payload.aves.length > 0) {
-            appData = masterState.payload;
+            appData = deduplicateAppData(masterState.payload);
             localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
             renderUI();
             if (typeof renderCalendarUI === 'function') renderCalendarUI();
@@ -2789,6 +2870,7 @@ CREATE POLICY "Permitir todo en calendario" ON public.calendario_jugadas FOR ALL
         }
 
         if (hasNewData) {
+          appData = deduplicateAppData(appData);
           localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
           renderUI();
           if (typeof renderCalendarUI === 'function') renderCalendarUI();
@@ -2811,7 +2893,7 @@ CREATE POLICY "Permitir todo en calendario" ON public.calendario_jugadas FOR ALL
       const pullRes = await pullAllFromSupabase(false);
 
       if (pushRes.success || pullRes.success) {
-        alert(`☁️ ¡Sincronización con la Nube Exitosa!\n\n• Corrales en la Nube: ${appData.corrales?.length || 0}\n• Aves Oficiales en la Nube: ${appData.aves?.length || 0}\n• Carpetas Particulares: ${appData.particularCorrales?.length || 0}\n• Fechas de Calendario: ${appData.calendar?.length || 0}\n\nTodos los computadores y celulares ahora tienen los mismos datos compartidos.`);
+        alert(`☁️ ¡Sincronización con la Nube Exitosa!\n\n• Corrales en la Nube: ${appData.corrales?.length || 0}\n• Aves Oficiales en la Nube: ${appData.aves?.length || 0}\n• Carpetas Particulares: ${appData.particularCorrales?.length || 0}\n• Fechas de Calendario: ${appData.calendar?.length || 0}\n\nTodos los dispositivos están sincronizados y sin duplicados.`);
       } else {
         const msg = pushRes.errors?.join('\n') || pushRes.error || pullRes.error || 'Error desconocido';
         alert(`⚠️ Aviso de Sincronización:\n\n${msg}\n\nVerifica las tablas y permisos en Supabase.`);
@@ -2828,11 +2910,17 @@ CREATE POLICY "Permitir todo en calendario" ON public.calendario_jugadas FOR ALL
     window.testCloudConnection = testCloudConnection;
     window.saveCloudCredentials = saveCloudCredentials;
     window.copyFullSQLToClipboard = copyFullSQLToClipboard;
+    window.deduplicateAppData = deduplicateAppData;
 
     function setupRealtimeSync() {
       if (!supabase) return;
       try {
-        supabase.channel('public:db-changes-global')
+        if (window.__activeRealtimeChannel) {
+          try {
+            supabase.removeChannel(window.__activeRealtimeChannel);
+          } catch (e) {}
+        }
+        const channel = supabase.channel('public:db-changes-global')
           .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
             console.log('Cambio detectado en la nube desde otro dispositivo:', payload);
             pullAllFromSupabase(true);
@@ -2842,6 +2930,7 @@ CREATE POLICY "Permitir todo en calendario" ON public.calendario_jugadas FOR ALL
               updateSupabaseStatus('connected', 'Nube en Vivo');
             }
           });
+        window.__activeRealtimeChannel = channel;
       } catch (e) {
         console.warn('Realtime channel warning:', e);
       }
@@ -10406,6 +10495,146 @@ ${insertStatements}
       appData.event.time = document.getElementById('event-time').value;
       autoSaveState();
     }
+
+    // VINCULACIÓN GLOBAL EXPLÍCITA EN WINDOW PARA ASEGURAR QUE EL 100% DE LOS BOTONES FUNCIONEN
+    const globalButtonFunctions = {
+      // Navegación y Vistas
+      setTab,
+      setStandingsMode,
+      setJudgeSubTab,
+      setCalendarViewMode,
+      setCalendarFilter,
+      navigateCalendarMonth,
+      navigateCalendarYear,
+      jumpToCalendarToday,
+      selectCalendarDay,
+      selectCalendarMonth,
+      changeCalendarSeasonYear,
+      updateEventInfo,
+
+      // Nube & Sincronización Supabase
+      openCloudSyncModal,
+      closeCloudSyncModal,
+      testCloudConnection,
+      saveCloudCredentials,
+      pushAllToSupabase,
+      pullAllFromSupabase,
+      syncWithSupabaseManual,
+      saveToSupabase: syncWithSupabaseManual,
+      copyFullSQLToClipboard,
+      deduplicateAppData,
+
+      // Torneo Oficial de Pollos (Cresta y Barba)
+      addNewCorral,
+      selectCorral,
+      editCorralPrompt,
+      deleteCorralPrompt,
+      clearCorralAvesPrompt,
+      clearCurrentSelectedCorralAves,
+      openRegisterBirdModal,
+      closeRegisterBirdModal,
+      submitBirdForm,
+      removeBird,
+      checkBirdPlacaChange,
+      executeBaloteoAlgorithm,
+      clearAllMatchesPrompt,
+      dissolveMatch,
+      openManualMatchPrompt,
+      setMatchWinner,
+      setMatchTime,
+
+      // Cámara / Iriun & Fotografía
+      startCameraCapture,
+      stopCameraStream,
+      takeSnapshot,
+      clearCurrentPhoto,
+      handlePhotoUpload,
+      onCameraDeviceChanged,
+      refreshCameraDevices,
+
+      // Módulo Particular & Criadores
+      openParticularRecordsModal,
+      closeParticularRecordsModal,
+      openRegisterParticularBirdModal,
+      closeRegisterParticularBirdModal,
+      submitParticularBirdForm,
+      removeParticularBird,
+      deleteParticularBird: removeParticularBird,
+      selectParticularCorral,
+      addNewParticularCorral,
+      editParticularCorralPrompt,
+      deleteParticularCorralPrompt,
+      clearParticularCorralAvesPrompt,
+      clearCurrentSelectedParticularCorralAves,
+      downloadParticularCorralCSV,
+      downloadParticularRecordsCSV,
+      renderParticularRecordsTable,
+      toggleParticularFullTableView,
+      onParticularParentInputChange,
+
+      // Consulta Pública & Genealogía
+      openPublicBirdLookup,
+      searchPublicBirdLookup,
+      onPublicLookupInputChange,
+      printBirdGenealogyCard,
+      renderPedigreeDirectoryTable,
+
+      // Juez de Valla & Torneo Diario
+      saveJudgeCbBirdWeighIn,
+      deleteJudgeCbBirdWeighIn,
+      setQuickCbWeighIn,
+      onJudgeCbPlacaInput,
+      setJudgeLbs,
+      adjustJudgeOz,
+      onJudgePlacaInput,
+      saveJudgeFreeBird,
+      clearDailyJudgeSessionPrompt,
+      deleteJudgeBirdWeighIn,
+      clearDailyMatchesPrompt,
+      dissolveDailyMatch,
+      openDailyManualMatchPrompt,
+      executeDailyBaloteoAlgorithm,
+      setDailyMatchWinner,
+      setDailyMatchTime,
+      executeJudgeSearch,
+      generateDailyPDF,
+
+      // Calendario Anual de Jugadas
+      openCalendarEventModal,
+      openCalendarEventModalWithDate,
+      closeCalendarEventModal,
+      saveCalendarEvent,
+      deleteCalendarEvent,
+      quickChangeCalendarStatus,
+      setAsActiveTournamentDate,
+      openCalendarDbModal,
+      closeCalendarDbModal,
+      saveCalendarDbConfig,
+      syncCalendarWithSupabase,
+      downloadCalendarSQLFile,
+      downloadCalendarJSON,
+      generateCalendarPDF,
+      toggleAdminSecurityPrompt,
+      closeAdminAuthModal,
+      submitAdminPinUnlock,
+      openCalendarPosterLightbox,
+      closeCalendarPosterLightbox,
+      handleCalendarPosterUpload,
+      removeCalendarEventPoster,
+
+      // Descargas, Exportaciones y Respaldo
+      generateOfficialPDF,
+      exportJSONBackup,
+      importJSONBackup,
+      downloadCorralJSON,
+      downloadAllCatalogJSON,
+      exportWebCatalogHTML,
+      exportSingleCorralMobileViewer,
+      clearCatalogByCorralPrompt,
+      resetFullSystemPrompt
+    };
+
+    Object.assign(window, globalButtonFunctions);
 
     // Iniciar
     renderUI();
