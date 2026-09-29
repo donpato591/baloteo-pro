@@ -1928,48 +1928,31 @@
       ],
       calendarConfig: {
         adminPin: '1234',
-        supabaseUrl: '[https//bntmjdwwtcearhxxyabg.supabase.co](https://bntmjdwwtcearhxxyabg.supabase.co)',
+        supabaseUrl: 'https//bntmjdwwtcearhxxyabg.supabase.co',
         supabaseKey: 'sb_publishable_967_Qr4R-5SuiGq-Px0O-w_7IcxfV92',
-        currentSeason: '2026'
-      }
-    };
+        currentSeason: '2026
 
-    let appData = loadSavedState();
-
-    function loadSavedState() {
-      try {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (parsed && parsed.aves && parsed.corrales) {
-            if (!parsed.voidedPlacas) parsed.voidedPlacas = [];
-            if (!parsed.dailyAves) parsed.dailyAves = [];
-            if (!parsed.dailyMatches) parsed.dailyMatches = [];
-            if (!parsed.dailyUnmatched) parsed.dailyUnmatched = [];
-            if (!parsed.calendar || !Array.isArray(parsed.calendar) || parsed.calendar.length === 0) parsed.calendar = INITIAL_DATA.calendar;
-            if (!parsed.calendarConfig) parsed.calendarConfig = INITIAL_DATA.calendarConfig;
-            return parsed;
-          }
-        }
-      } catch (e) {
-        console.error(e);
-      }
-      return INITIAL_DATA;
-    }
-
-    function autoSaveState() {
-      try {
+    async function autoSaveState() {
+    try {
+        // 1. Guarda en el teléfono como respaldo rápido
         localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
+
+        // 2. Sube y sincroniza en tiempo real con Supabase en la nube
+        if (typeof supabase !== 'undefined' && supabaseUrl && supabaseKey) {
+            await supabase
+                .from('baloteo_master_state')
+                .upsert({ id: 1, payload: appData, updated_at: new Date() });
+        }
+
         const statusEl = document.getElementById('auto-save-status');
         if (statusEl) {
-          statusEl.innerText = 'Guardado ✓';
-          setTimeout(() => { if (statusEl) statusEl.innerText = 'Activo'; }, 1500);
+            statusEl.innerText = 'Guardado ✓';
+            setTimeout(() => { if (statusEl) statusEl.innerText = 'Activo'; }, 1500);
         }
-      } catch (e) {
-        console.error(e);
-      }
+    } catch (e) {
+        console.error("Error al guardar en la nube:", e);
     }
-
+}
     function setTab(tabId) {
       document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
       document.querySelectorAll('.nav-item').forEach(btn => {
