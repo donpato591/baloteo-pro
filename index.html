@@ -1953,12 +1953,16 @@
         console.error("Error al guardar en la nube:", e);
     }
 }
-    function setTab(tabId) {
-      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
-      document.querySelectorAll('.nav-item').forEach(btn => {
+   window.setTab = function(tabId) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+    document.querySelectorAll('.nav-item').forEach(btn => {
         btn.classList.remove('bg-red-50', 'text-red-700', 'border-l-4', 'border-red-700', 'font-bold');
         btn.classList.add('text-gray-600');
-      });
+    });
+
+    const target = document.getElementById('view-' + tabId);
+    if (target) target.classList.remove('hidden');
+};
 
       const target = document.getElementById('view-' + tabId);
       if (target) target.classList.remove('hidden');
