@@ -6,6 +6,10 @@
     {
       "src": "/(.*)",
       "dest": "/index.html"
+    },
+    {
+      "src": "/indice(.*)",
+      "dest": "/index.html"
     }
   ]
 }
