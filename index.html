@@ -6,6 +6,8 @@
   <title>Baloteo Pro - Sistema de Gestión de Torneo y Baloteo</title>
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Supabase JS CDN (v2) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <!-- jsPDF & AutoTable CDN para generación de PDF profesional -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
@@ -29,6 +31,17 @@
             <span class="text-[10px] text-red-200 font-medium">Gestión de Torneo y Valla</span>
           </div>
         </div>
+      </div>
+
+      <!-- Estado Supabase y Sincronización Multidispositivo -->
+      <div onclick="openCloudSyncModal()" class="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white flex items-center justify-between text-xs border-b border-gray-700 cursor-pointer transition" title="Abrir Centro de Control y Diagnóstico de la Nube">
+        <div class="flex items-center space-x-2">
+          <span id="sb-status-dot" class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+          <span id="sb-status-text" class="text-[11px] font-bold text-emerald-300">Nube Conectada</span>
+        </div>
+        <button type="button" onclick="event.stopPropagation(); openCloudSyncModal()" class="bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded text-[10px] font-black cursor-pointer shadow-xs transition" title="Abrir Centro Nube">
+          ⚙️ Nube
+        </button>
       </div>
 
       <!-- Menú de Navegación Lateral -->
@@ -86,9 +99,9 @@
           <span id="auto-save-status" class="text-emerald-600 font-bold">Activo</span>
         </div>
         
-        <button onclick="savetosupabase()" class="w-full bg-cyan-700 hover:bg-cyan-800 text-white py-2 px-3 rounded-lg flex items-center justify-center space-x-2 transition-colors shadow-sm">
-          <span>🌐</span>
-          <span>guardar en la nube</span>
+        <button type="button" onclick="openCloudSyncModal()" class="w-full bg-cyan-700 hover:bg-cyan-800 text-white py-2.5 px-3 rounded-lg font-bold transition flex items-center justify-center space-x-2 shadow-xs cursor-pointer text-center" title="Abrir Centro de Sincronización en la Nube">
+          <span>☁️</span>
+          <span>Centro de Nube y Sincronización</span>
         </button>
 
         <button onclick="generateOfficialPDF()" class="w-full bg-red-600 hover:bg-red-700 text-white py-2 px-3 rounded-lg font-bold transition flex items-center justify-center space-x-2 shadow-xs cursor-pointer">
@@ -1520,6 +1533,103 @@
     </div>
   </div>
 
+  <!-- MODAL DE CONTROL Y DIAGNÓSTICO EN LA NUBE (SUPABASE SYNC CENTER) -->
+  <div id="modal-cloud-sync" class="fixed inset-0 bg-black/70 hidden items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-3xl p-6 max-w-xl w-full space-y-4 shadow-2xl max-h-[92vh] overflow-y-auto">
+      <div class="flex justify-between items-center border-b pb-3">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 bg-red-100 text-red-700 rounded-xl flex items-center justify-center text-xl font-black">
+            ☁️
+          </div>
+          <div>
+            <h3 class="font-black text-lg text-gray-800">Centro de Sincronización en la Nube</h3>
+            <p class="text-xs text-gray-500">Conecta Computadores y Celulares mediante Supabase</p>
+          </div>
+        </div>
+        <button onclick="closeCloudSyncModal()" class="text-gray-400 hover:text-gray-600 font-bold text-lg cursor-pointer">✕</button>
+      </div>
+
+      <!-- Estado de Conexión & Diagnóstico en Vivo -->
+      <div id="cloud-diagnostic-box" class="p-3.5 rounded-2xl bg-slate-900 text-white space-y-2">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <span id="cloud-diag-dot" class="w-3 h-3 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span id="cloud-diag-status" class="font-black text-xs text-emerald-300">Comprobando Conexión...</span>
+          </div>
+          <button type="button" onclick="testCloudConnection()" class="bg-slate-700 hover:bg-slate-600 text-white px-2.5 py-1 rounded-lg text-[10px] font-bold cursor-pointer transition">
+            🧪 Probar Conexión
+          </button>
+        </div>
+        <div id="cloud-diag-detail" class="text-[11px] text-slate-300 font-mono bg-slate-950/60 p-2.5 rounded-xl break-all">
+          Esperando diagnóstico...
+        </div>
+      </div>
+
+      <!-- Configuración de Credenciales -->
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block font-bold text-gray-700 mb-1">Supabase Project URL:</label>
+          <input 
+            type="url" 
+            id="cloud-input-url" 
+            placeholder="https://xxxx.supabase.co" 
+            class="w-full border-2 border-gray-200 focus:border-red-600 rounded-xl p-2.5 text-xs font-mono bg-gray-50 focus:bg-white outline-none" 
+          />
+        </div>
+
+        <div>
+          <label class="block font-bold text-gray-700 mb-1">
+            Supabase Anon Public Key:
+            <span class="text-gray-400 font-normal ml-1">(debe ser la clave <code class="font-bold text-red-600">anon public</code> tipo JWT `eyJ...`)</span>
+          </label>
+          <input 
+            type="text" 
+            id="cloud-input-key" 
+            placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." 
+            class="w-full border-2 border-gray-200 focus:border-red-600 rounded-xl p-2.5 text-xs font-mono bg-gray-50 focus:bg-white outline-none" 
+          />
+        </div>
+
+        <!-- Botones de Acción de Sincronización -->
+        <div class="grid grid-cols-2 gap-2 pt-1">
+          <button 
+            type="button" 
+            onclick="pushAllToSupabase(false)" 
+            class="bg-red-700 hover:bg-red-800 text-white font-bold p-3 rounded-xl text-xs transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+          >
+            <span>⬆️</span>
+            <span>Subir Todo (Push)</span>
+          </button>
+          
+          <button 
+            type="button" 
+            onclick="pullAllFromSupabase(false)" 
+            class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold p-3 rounded-xl text-xs transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+          >
+            <span>⬇️</span>
+            <span>Descargar Todo (Pull)</span>
+          </button>
+        </div>
+
+        <!-- Script SQL para Supabase -->
+        <div class="border-t pt-3 space-y-2">
+          <div class="flex justify-between items-center">
+            <span class="font-bold text-gray-800 text-xs">📋 Script SQL para tu Supabase SQL Editor:</span>
+            <button type="button" onclick="copyFullSQLToClipboard()" class="text-xs bg-gray-800 hover:bg-gray-900 text-white px-2.5 py-1 rounded-lg font-bold cursor-pointer transition">
+              📋 Copiar Script SQL
+            </button>
+          </div>
+          <p class="text-[11px] text-gray-500">Pega este script en el <a href="https://supabase.com/dashboard/project/bntmjdwwtcearhxxyabg/sql/new" target="_blank" class="text-red-600 font-bold underline">SQL Editor de Supabase</a> para crear las tablas con permisos públicos sin bloqueos.</p>
+        </div>
+      </div>
+
+      <div class="pt-3 border-t flex justify-between items-center">
+        <button type="button" onclick="closeCloudSyncModal()" class="px-4 py-2.5 bg-gray-200 hover:bg-gray-300 rounded-xl text-xs font-bold cursor-pointer">Cerrar</button>
+        <button type="button" onclick="saveCloudCredentials()" class="px-5 py-2.5 bg-red-700 hover:bg-red-800 text-white rounded-xl text-xs font-black cursor-pointer shadow-sm">Guardar y Conectar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL DE PIN / AUTENTICACIÓN ADMINISTRADOR -->
   <div id="modal-admin-auth" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50 p-4">
     <div class="bg-white rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-2xl text-center">
@@ -2194,11 +2304,548 @@
       ],
       calendarConfig: {
         adminPin: '1234',
-        supabaseUrl:'https://bntmjdwwtcearhxxyabg.supabase.co',
-        supabaseKey:'sb_publishable_967_Qr4R-5SuiGq-Px0O-w_7IcxfV92',
+        supabaseUrl: 'https://bntmjdwwtcearhxxyabg.supabase.co',
+        supabaseKey: 'sb_publishable_967_Qr4R-5SuiGq-Px0O-w_7IcxfV92',
         currentSeason: '2026'
       }
     };
+
+    // =========================================================================
+    // CONFIGURACIÓN Y CLIENTE SUPABASE (SINCRONIZACIÓN EN TIEMPO REAL MULTIUSUARIO)
+    // =========================================================================
+    const SUPABASE_PROJECT_URL = 'https://bntmjdwwtcearhxxyabg.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_967_Qr4R-5SuiGq-Px0O-w_7IcxfV92';
+    let supabase = null;
+    let isCloudSyncing = false;
+    let cloudDebounceTimer = null;
+
+    function getStoredSupabaseConfig() {
+      const u = localStorage.getItem('baloteo_supabase_url') || SUPABASE_PROJECT_URL;
+      const k = localStorage.getItem('baloteo_supabase_key') || SUPABASE_ANON_KEY;
+      return { url: u.trim(), key: k.trim() };
+    }
+
+    function initSupabaseClient() {
+      if (!window.supabase) return;
+      try {
+        const { url, key } = getStoredSupabaseConfig();
+        supabase = window.supabase.createClient(url, key);
+      } catch (e) {
+        console.error('Error inicializando cliente Supabase:', e);
+      }
+    }
+
+    initSupabaseClient();
+
+    function openCloudSyncModal() {
+      const modal = document.getElementById('modal-cloud-sync');
+      if (!modal) return;
+      const { url, key } = getStoredSupabaseConfig();
+      const inUrl = document.getElementById('cloud-input-url');
+      const inKey = document.getElementById('cloud-input-key');
+      if (inUrl) inUrl.value = url;
+      if (inKey) inKey.value = key;
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      testCloudConnection();
+    }
+
+    function closeCloudSyncModal() {
+      const modal = document.getElementById('modal-cloud-sync');
+      if (!modal) return;
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    async function testCloudConnection() {
+      const diagDot = document.getElementById('cloud-diag-dot');
+      const diagStatus = document.getElementById('cloud-diag-status');
+      const diagDetail = document.getElementById('cloud-diag-detail');
+
+      if (diagDot) diagDot.className = 'w-3 h-3 rounded-full bg-amber-400 animate-pulse';
+      if (diagStatus) diagStatus.innerText = 'Probando conexión con Supabase...';
+      if (diagDetail) diagDetail.innerText = 'Enviando solicitud de prueba...';
+
+      const inUrl = (document.getElementById('cloud-input-url')?.value || '').trim() || SUPABASE_PROJECT_URL;
+      const inKey = (document.getElementById('cloud-input-key')?.value || '').trim() || SUPABASE_ANON_KEY;
+
+      try {
+        const testEndpoint = `${inUrl}/rest/v1/aves?select=count`;
+        const res = await fetch(testEndpoint, {
+          method: 'GET',
+          headers: {
+            'apikey': inKey,
+            'Authorization': `Bearer ${inKey}`,
+            'Range': '0-0'
+          }
+        });
+
+        if (res.status === 200 || res.status === 206) {
+          if (diagDot) diagDot.className = 'w-3 h-3 rounded-full bg-emerald-400';
+          if (diagStatus) diagStatus.innerText = '🟢 Conexión Exitosa (200 OK)';
+          if (diagDetail) diagDetail.innerText = `¡Tu base de datos Supabase responde correctamente! Las tablas están listas y los dispositivos pueden sincronizar.`;
+          updateSupabaseStatus('connected', 'Nube Conectada');
+        } else if (res.status === 401 || res.status === 403) {
+          if (diagDot) diagDot.className = 'w-3 h-3 rounded-full bg-red-500';
+          if (diagStatus) diagStatus.innerText = '🔴 Error 401: Clave API Inválida';
+          if (diagDetail) diagDetail.innerText = `Supabase rechazó la clave. Asegúrate de ingresar tu clave anon JWT que comienza con "eyJ...". Ve a tu Supabase Dashboard > Project Settings > API y copia la clave "anon public".`;
+          updateSupabaseStatus('error', 'Clave Inválida');
+        } else if (res.status === 404 || res.status === 400) {
+          if (diagDot) diagDot.className = 'w-3 h-3 rounded-full bg-amber-500';
+          if (diagStatus) diagStatus.innerText = '🟡 Falta Crear Tablas en Supabase';
+          const txt = await res.text();
+          if (diagDetail) diagDetail.innerText = `Conexión alcanzada, pero la tabla "aves" aún no existe (${txt}). Haz clic en "Copiar Script SQL" abajo y pégalo en el SQL Editor de Supabase.`;
+          updateSupabaseStatus('error', 'Faltan Tablas');
+        } else {
+          const txt = await res.text();
+          if (diagDot) diagDot.className = 'w-3 h-3 rounded-full bg-amber-500';
+          if (diagStatus) diagStatus.innerText = `Respuesta Supabase: HTTP ${res.status}`;
+          if (diagDetail) diagDetail.innerText = txt || 'Respuesta desconocida';
+        }
+      } catch (err) {
+        if (diagDot) diagDot.className = 'w-3 h-3 rounded-full bg-red-500';
+        if (diagStatus) diagStatus.innerText = '🔴 Error de Red / Conexión';
+        if (diagDetail) diagDetail.innerText = `No se pudo contactar a Supabase: ${err.message}. Revisa tu conexión a internet o la URL del proyecto.`;
+        updateSupabaseStatus('error', 'Sin Conexión');
+      }
+    }
+
+    async function saveCloudCredentials() {
+      const inUrl = (document.getElementById('cloud-input-url')?.value || '').trim();
+      const inKey = (document.getElementById('cloud-input-key')?.value || '').trim();
+
+      if (!inUrl || !inKey) {
+        alert('Por favor ingresa la URL del proyecto y la Clave API de Supabase.');
+        return;
+      }
+
+      localStorage.setItem('baloteo_supabase_url', inUrl);
+      localStorage.setItem('baloteo_supabase_key', inKey);
+
+      try {
+        if (window.supabase) {
+          supabase = window.supabase.createClient(inUrl, inKey);
+        }
+        alert('✓ Configuración de Supabase guardada. Iniciando prueba de sincronización...');
+        await testCloudConnection();
+        await pushAllToSupabase(false);
+        await pullAllFromSupabase(false);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function copyFullSQLToClipboard() {
+      const sql = `-- ==============================================================================
+-- BALOTEO PRO - ESQUEMA INTEGRAL SUPABASE (MULTIUSUARIO Y MULTIDISPOSITIVO)
+-- ==============================================================================
+
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- 1. TABLA MASTER SNAPSHOT (Sincronización Total en 1 Paso)
+CREATE TABLE IF NOT EXISTS public.baloteo_master_state (
+    id TEXT PRIMARY KEY,
+    payload JSONB NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE public.baloteo_master_state ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir todo en master state" ON public.baloteo_master_state;
+CREATE POLICY "Permitir todo en master state" ON public.baloteo_master_state FOR ALL USING (true) WITH CHECK (true);
+
+-- 2. TABLA CORRALES
+CREATE TABLE IF NOT EXISTS public.corrales (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    nombre VARCHAR(255) NOT NULL,
+    propietario VARCHAR(255),
+    ciudad VARCHAR(255),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE public.corrales ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir todo en corrales" ON public.corrales;
+CREATE POLICY "Permitir todo en corrales" ON public.corrales FOR ALL USING (true) WITH CHECK (true);
+
+-- 3. TABLA CARPETAS PARTICULARES
+CREATE TABLE IF NOT EXISTS public.carpetas (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    nombre VARCHAR(255) NOT NULL,
+    corral_id UUID,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE public.carpetas ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir todo en carpetas" ON public.carpetas;
+CREATE POLICY "Permitir todo en carpetas" ON public.carpetas FOR ALL USING (true) WITH CHECK (true);
+
+-- 4. TABLA AVES
+CREATE TABLE IF NOT EXISTS public.aves (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    placa VARCHAR(50) NOT NULL,
+    corral_id UUID,
+    cresta VARCHAR(50),
+    color_pluma VARCHAR(100),
+    color_patas VARCHAR(50),
+    peso_libras NUMERIC DEFAULT 3,
+    peso_onzas NUMERIC DEFAULT 14,
+    fecha_nacimiento DATE,
+    fecha_marcaje DATE,
+    es_mclp BOOLEAN DEFAULT false,
+    ciudad VARCHAR(100),
+    foto_url TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE public.aves ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir todo en aves" ON public.aves;
+CREATE POLICY "Permitir todo en aves" ON public.aves FOR ALL USING (true) WITH CHECK (true);
+
+-- 5. TABLA COTEJOS
+CREATE TABLE IF NOT EXISTS public.cotejos_baloteo (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    ave_a_id UUID,
+    ave_b_id UUID,
+    diferencia_peso_gramos INTEGER DEFAULT 0,
+    numero_pelea INTEGER DEFAULT 1,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE public.cotejos_baloteo ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir todo en cotejos" ON public.cotejos_baloteo;
+CREATE POLICY "Permitir todo en cotejos" ON public.cotejos_baloteo FOR ALL USING (true) WITH CHECK (true);
+
+-- 6. TABLA CALENDARIO
+CREATE TABLE IF NOT EXISTS public.calendario_jugadas (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    title VARCHAR(255) NOT NULL,
+    event_date DATE NOT NULL,
+    event_time VARCHAR(10) DEFAULT '08:00',
+    venue VARCHAR(255) DEFAULT 'Coliseo',
+    comuna VARCHAR(100) DEFAULT 'General',
+    category VARCHAR(100) DEFAULT 'Pollos Cresta y Barba',
+    manager VARCHAR(150) DEFAULT 'Juez Principal',
+    prizes TEXT,
+    status VARCHAR(50) DEFAULT 'Programado',
+    notes TEXT,
+    is_mclp_scoring BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE public.calendario_jugadas ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permitir todo en calendario" ON public.calendario_jugadas;
+CREATE POLICY "Permitir todo en calendario" ON public.calendario_jugadas FOR ALL USING (true) WITH CHECK (true);
+`;
+
+      navigator.clipboard.writeText(sql).then(() => {
+        alert('📋 ¡Script SQL copiado exitosamente al portapapeles!\n\nPégalo y ejecútalo en el SQL Editor de tu Supabase Dashboard.');
+      }).catch(() => {
+        prompt('Copia este código SQL manualmente:', sql);
+      });
+    }
+
+    function updateSupabaseStatus(status, message) {
+      const dot = document.getElementById('sb-status-dot');
+      const text = document.getElementById('sb-status-text');
+      if (!dot || !text) return;
+      if (status === 'connected') {
+        dot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400';
+        text.className = 'text-[11px] font-bold text-emerald-300';
+        text.textContent = message || 'Nube Conectada';
+      } else if (status === 'syncing') {
+        dot.className = 'w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse';
+        text.className = 'text-[11px] font-bold text-amber-300';
+        text.textContent = message || 'Sincronizando...';
+      } else if (status === 'error') {
+        dot.className = 'w-2.5 h-2.5 rounded-full bg-red-400';
+        text.className = 'text-[11px] font-bold text-red-300';
+        text.textContent = message || 'Modo Local (Offline)';
+      }
+    }
+
+    function toUUID(val) {
+      if (!val) return '00000000-0000-4000-a000-000000000000';
+      const s = String(val).trim();
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (uuidRegex.test(s)) return s.toLowerCase();
+      let hex = '';
+      for (let i = 0; i < s.length; i++) {
+        hex += s.charCodeAt(i).toString(16).padStart(2, '0');
+      }
+      hex = hex.padEnd(32, '0').slice(0, 32);
+      return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`.toLowerCase();
+    }
+
+    async function pushAllToSupabase(silent = false) {
+      if (!supabase) {
+        if (!silent) alert('⚠️ Cliente Supabase no está conectado.');
+        return { success: false, error: 'No conectado' };
+      }
+      if (isCloudSyncing) return { success: true };
+      isCloudSyncing = true;
+      if (!silent) updateSupabaseStatus('syncing', 'Guardando en la Nube...');
+
+      const errors = [];
+      let savedCorrales = 0, savedAves = 0, savedPart = 0, savedCal = 0;
+
+      try {
+        // 1. Subir Corrales
+        if (appData.corrales && appData.corrales.length > 0) {
+          const corralesData = appData.corrales.map(c => ({
+            id: toUUID(c.id),
+            nombre: c.name,
+            propietario: c.owner || 'Criador',
+            ciudad: c.comuna || ''
+          }));
+          const { error } = await supabase.from('corrales').upsert(corralesData, { onConflict: 'id' });
+          if (error) errors.push(`Corrales: ${error.message}`);
+          else savedCorrales = corralesData.length;
+        }
+
+        // 2. Subir Carpetas Particulares
+        if (appData.particularCorrales && appData.particularCorrales.length > 0) {
+          const carpetasData = appData.particularCorrales.map(p => ({
+            id: toUUID(p.id),
+            nombre: p.name,
+            corral_id: toUUID(appData.corrales?.[0]?.id || '1')
+          }));
+          const { error } = await supabase.from('carpetas').upsert(carpetasData, { onConflict: 'id' });
+          if (error) errors.push(`Carpetas: ${error.message}`);
+          else savedPart = carpetasData.length;
+        }
+
+        // 3. Subir Aves Oficiales
+        if (appData.aves && appData.aves.length > 0) {
+          const avesData = appData.aves.map(a => ({
+            id: toUUID(a.id),
+            placa: String(a.placa),
+            corral_id: toUUID(a.corralId || appData.corrales?.[0]?.id || '1'),
+            cresta: a.comb || 'Sierra',
+            color_pluma: a.featherColor || 'Giro',
+            color_patas: a.legColor || 'Amarilla',
+            peso_libras: Number(a.weightLbs) || 0,
+            peso_onzas: Number(a.weightOz) || 0,
+            fecha_nacimiento: a.birthDate || null,
+            fecha_marcaje: a.markDate || null,
+            es_mclp: !!a.isMclp,
+            ciudad: a.comuna || ''
+          }));
+          const { error } = await supabase.from('aves').upsert(avesData, { onConflict: 'id' });
+          if (error) errors.push(`Aves: ${error.message}`);
+          else savedAves = avesData.length;
+        }
+
+        // 4. Subir Cotejos / Baloteo
+        if (appData.matches && appData.matches.length > 0) {
+          const matchesData = appData.matches.map((m, idx) => ({
+            id: toUUID(m.id || ('match_' + idx)),
+            ave_a_id: toUUID(m.ave1?.id || '1'),
+            ave_b_id: toUUID(m.ave2?.id || '2'),
+            diferencia_peso_gramos: Math.round(((m.diff || 0) * 28.3495)),
+            numero_pelea: idx + 1
+          }));
+          await supabase.from('cotejos_baloteo').upsert(matchesData, { onConflict: 'id' }).catch(console.warn);
+        }
+
+        // 5. Subir Calendario
+        if (appData.calendar && appData.calendar.length > 0) {
+          const calData = appData.calendar.map(c => ({
+            title: c.title,
+            event_date: c.eventDate,
+            event_time: c.eventTime || '08:00',
+            venue: c.venue || 'Coliseo',
+            comuna: c.comuna || 'General',
+            category: c.category || 'Pollos Cresta y Barba',
+            manager: c.manager || 'Juez Principal',
+            prizes: c.prizes || null,
+            status: c.status || 'Programado',
+            notes: c.notes || null,
+            is_mclp_scoring: !!c.isMclpScoring
+          }));
+          const { error } = await supabase.from('calendario_jugadas').upsert(calData, { onConflict: 'title,event_date' });
+          if (error) errors.push(`Calendario: ${error.message}`);
+          else savedCal = calData.length;
+        }
+
+        // 6. Respaldo Maestro JSON
+        try {
+          await supabase.from('baloteo_master_state').upsert({
+            id: 'torneo_actual',
+            payload: appData,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'id' });
+        } catch (e) {}
+
+        if (errors.length > 0) {
+          console.warn('Avisos de Supabase:', errors);
+          updateSupabaseStatus('error', 'Revisar Conexión');
+          return { success: false, errors, savedCorrales, savedAves, savedPart, savedCal };
+        } else {
+          updateSupabaseStatus('connected', 'Nube Sincronizada ✓');
+          return { success: true, savedCorrales, savedAves, savedPart, savedCal };
+        }
+      } catch (err) {
+        console.error('Error al guardar en Supabase:', err);
+        updateSupabaseStatus('error', 'Error al Guardar');
+        return { success: false, error: err.message };
+      } finally {
+        isCloudSyncing = false;
+      }
+    }
+
+    async function pullAllFromSupabase(silent = false) {
+      if (!supabase) return { success: false };
+      if (!silent) updateSupabaseStatus('syncing', 'Descargando datos...');
+
+      try {
+        // 1. Intentar cargar desde master snapshot primero
+        try {
+          const { data: masterState } = await supabase.from('baloteo_master_state').select('payload').eq('id', 'torneo_actual').single();
+          if (masterState && masterState.payload && Array.isArray(masterState.payload.aves) && masterState.payload.aves.length > 0) {
+            appData = masterState.payload;
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
+            renderUI();
+            if (typeof renderCalendarUI === 'function') renderCalendarUI();
+            if (typeof renderJudgeUI === 'function') renderJudgeUI();
+            if (typeof renderParticularUI === 'function') renderParticularUI();
+            updateSupabaseStatus('connected', 'Nube Sincronizada ✓');
+            return { success: true, countAves: appData.aves.length };
+          }
+        } catch (e) {}
+
+        // 2. Cargar desde tablas relacionales
+        const [rCorrales, rCarpetas, rAves, rCotejos, rCalendario] = await Promise.allSettled([
+          supabase.from('corrales').select('*').order('nombre'),
+          supabase.from('carpetas').select('*').order('nombre'),
+          supabase.from('aves').select('*').order('placa'),
+          supabase.from('cotejos_baloteo').select('*').order('numero_pelea'),
+          supabase.from('calendario_jugadas').select('*').order('event_date')
+        ]);
+
+        let hasNewData = false;
+
+        if (rCorrales.status === 'fulfilled' && rCorrales.value.data && rCorrales.value.data.length > 0) {
+          const remoteCorrales = rCorrales.value.data.map(c => ({
+            id: String(c.id),
+            name: c.nombre,
+            owner: c.propietario || 'Criador',
+            comuna: c.ciudad || ''
+          }));
+          if (remoteCorrales.length > 0) {
+            appData.corrales = remoteCorrales;
+            if (!appData.selectedCorralId) appData.selectedCorralId = remoteCorrales[0].id;
+            hasNewData = true;
+          }
+        }
+
+        if (rCarpetas.status === 'fulfilled' && rCarpetas.value.data && rCarpetas.value.data.length > 0) {
+          const remoteCarpetas = rCarpetas.value.data.map(f => ({
+            id: String(f.id),
+            name: f.nombre,
+            owner: ''
+          }));
+          if (remoteCarpetas.length > 0) {
+            appData.particularCorrales = remoteCarpetas;
+            if (!appData.selectedParticularCorralId) appData.selectedParticularCorralId = remoteCarpetas[0].id;
+            hasNewData = true;
+          }
+        }
+
+        if (rAves.status === 'fulfilled' && rAves.value.data && rAves.value.data.length > 0) {
+          const remoteAves = rAves.value.data.map(a => ({
+            id: String(a.id),
+            corralId: String(a.corral_id || appData.corrales?.[0]?.id || '1'),
+            placa: String(a.placa),
+            traba: a.ciudad || 'Traba',
+            comuna: a.ciudad || 'General',
+            comb: a.cresta || 'Sierra',
+            legColor: a.color_patas || 'Amarilla',
+            featherColor: a.color_pluma || 'Giro',
+            weightLbs: Number(a.peso_libras) || 3,
+            weightOz: Number(a.peso_onzas) || 14,
+            birthDate: a.fecha_nacimiento || '',
+            markDate: a.fecha_marcaje || '',
+            isMclp: !!a.es_mclp,
+            photo: a.foto_url || null
+          }));
+          if (remoteAves.length > 0) {
+            appData.aves = remoteAves;
+            hasNewData = true;
+          }
+        }
+
+        if (rCalendario.status === 'fulfilled' && rCalendario.value.data && rCalendario.value.data.length > 0) {
+          const remoteCal = rCalendario.value.data.map(c => ({
+            id: String(c.id || ('cal_' + Date.now())),
+            title: c.title,
+            eventDate: c.event_date,
+            eventTime: c.event_time || '08:00',
+            venue: c.venue || 'Coliseo',
+            comuna: c.comuna || 'General',
+            category: c.category || 'Pollos Cresta y Barba',
+            manager: c.manager || 'Juez Principal',
+            prizes: c.prizes || '',
+            status: c.status || 'Programado',
+            notes: c.notes || '',
+            isMclpScoring: !!c.is_mclp_scoring
+          }));
+          if (remoteCal.length > 0) {
+            appData.calendar = remoteCal;
+            hasNewData = true;
+          }
+        }
+
+        if (hasNewData) {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
+          renderUI();
+          if (typeof renderCalendarUI === 'function') renderCalendarUI();
+          if (typeof renderJudgeUI === 'function') renderJudgeUI();
+          if (typeof renderParticularUI === 'function') renderParticularUI();
+        }
+
+        updateSupabaseStatus('connected', 'Nube Sincronizada ✓');
+        return { success: true, countAves: appData.aves?.length || 0 };
+      } catch (err) {
+        console.error('Error descargando de Supabase:', err);
+        updateSupabaseStatus('error', 'Error al Descargar');
+        return { success: false, error: err.message };
+      }
+    }
+
+    async function syncWithSupabaseManual() {
+      updateSupabaseStatus('syncing', 'Sincronizando...');
+      const pushRes = await pushAllToSupabase(false);
+      const pullRes = await pullAllFromSupabase(false);
+
+      if (pushRes.success || pullRes.success) {
+        alert(`☁️ ¡Sincronización con la Nube Exitosa!\n\n• Corrales en la Nube: ${appData.corrales?.length || 0}\n• Aves Oficiales en la Nube: ${appData.aves?.length || 0}\n• Carpetas Particulares: ${appData.particularCorrales?.length || 0}\n• Fechas de Calendario: ${appData.calendar?.length || 0}\n\nTodos los computadores y celulares ahora tienen los mismos datos compartidos.`);
+      } else {
+        const msg = pushRes.errors?.join('\n') || pushRes.error || pullRes.error || 'Error desconocido';
+        alert(`⚠️ Aviso de Sincronización:\n\n${msg}\n\nVerifica las tablas y permisos en Supabase.`);
+      }
+    }
+
+    // Alias global para resolver cualquier llamada directa a saveToSupabase
+    window.saveToSupabase = syncWithSupabaseManual;
+    window.syncWithSupabaseManual = syncWithSupabaseManual;
+    window.pushAllToSupabase = pushAllToSupabase;
+    window.pullAllFromSupabase = pullAllFromSupabase;
+    window.openCloudSyncModal = openCloudSyncModal;
+    window.closeCloudSyncModal = closeCloudSyncModal;
+    window.testCloudConnection = testCloudConnection;
+    window.saveCloudCredentials = saveCloudCredentials;
+    window.copyFullSQLToClipboard = copyFullSQLToClipboard;
+
+    function setupRealtimeSync() {
+      if (!supabase) return;
+      try {
+        supabase.channel('public:db-changes-global')
+          .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
+            console.log('Cambio detectado en la nube desde otro dispositivo:', payload);
+            pullAllFromSupabase(true);
+          })
+          .subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+              updateSupabaseStatus('connected', 'Nube en Vivo');
+            }
+          });
+      } catch (e) {
+        console.warn('Realtime channel warning:', e);
+      }
+    }
 
     let appData = loadSavedState();
 
@@ -2240,7 +2887,7 @@
       return INITIAL_DATA;
     }
 
-    function autoSaveState() {
+    function autoSaveState(triggerCloud = true) {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
         const statusEl = document.getElementById('auto-save-status');
@@ -2248,9 +2895,19 @@
           statusEl.innerText = 'Guardado ✓';
           setTimeout(() => { if (statusEl) statusEl.innerText = 'Activo'; }, 1500);
         }
+        if (triggerCloud && supabase) {
+          debouncedCloudPush();
+        }
       } catch (e) {
         console.error(e);
       }
+    }
+
+    function debouncedCloudPush(delay = 1000) {
+      if (cloudDebounceTimer) clearTimeout(cloudDebounceTimer);
+      cloudDebounceTimer = setTimeout(() => {
+        pushAllToSupabase(true);
+      }, delay);
     }
 
     function setTab(tabId) {
@@ -4145,14 +4802,16 @@
     }
 
     function addNewCorral() {
-      const name = document.getElementById('input-new-corral').value.trim();
+      const input = document.getElementById('input-new-corral');
+      const name = (input ? input.value : '').trim();
       if (!name) return;
       const newC = { id: Date.now().toString(), name };
       appData.corrales.push(newC);
       appData.selectedCorralId = newC.id;
-      document.getElementById('input-new-corral').value = '';
+      if (input) input.value = '';
       autoSaveState();
       renderUI();
+      alert(`¡Corral "${name}" agregado con éxito!`);
     }
 
     // MODIFICAR NOMBRE DE CORRAL
@@ -4735,18 +5394,18 @@
         }
       }
 
-      const traba = document.getElementById('bird-in-traba').value.trim() || 'General';
+      const traba = (document.getElementById('bird-in-traba')?.value || 'General').trim();
       const comuna = (document.getElementById('bird-in-comuna')?.value || '').trim();
       const owner = (document.getElementById('bird-in-owner')?.value || '').trim();
       const placaCorral = (document.getElementById('bird-in-placa-corral')?.value || '').trim();
       const padre = (document.getElementById('bird-in-padre')?.value || '').trim();
       const madre = (document.getElementById('bird-in-madre')?.value || '').trim();
-      const comb = document.getElementById('bird-in-comb').value;
-      const legColor = document.getElementById('bird-in-leg').value;
-      const featherColor = document.getElementById('bird-in-feather').value.trim();
-      const birthDate = document.getElementById('bird-in-birth').value;
-      const markDate = document.getElementById('bird-in-mark').value;
-      const isMclp = document.getElementById('bird-in-mclp')?.checked || false;
+      const comb = document.getElementById('bird-in-comb')?.value || 'Sierra';
+      const legColor = document.getElementById('bird-in-leg')?.value || 'Amarilla';
+      const featherColor = (document.getElementById('bird-in-feather')?.value || '').trim();
+      const birthDate = document.getElementById('bird-in-birth')?.value || '';
+      const markDate = document.getElementById('bird-in-mark')?.value || '';
+      const isMclp = !!document.getElementById('bird-in-mclp')?.checked;
 
       appData.aves.push({
         id: Date.now().toString() + '_' + Math.random().toString(36).substr(2, 4),
@@ -4775,6 +5434,7 @@
       autoSaveState();
       closeRegisterBirdModal();
       renderUI();
+      alert(`¡Ave guardada con éxito con la placa #${enteredPlaca}!`);
     }
 
     function removeBird(id) {
@@ -9751,6 +10411,13 @@ ${insertStatements}
     renderUI();
     if (appData.matches.length === 0) {
       executeBaloteoAlgorithm();
+    }
+
+    // Sincronización automática con la Nube al iniciar
+    if (supabase) {
+      pullAllFromSupabase(true).then(() => {
+        setupRealtimeSync();
+      });
     }
   </script>
 </body>
